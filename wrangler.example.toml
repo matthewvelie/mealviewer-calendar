@@ -27,6 +27,20 @@ TIMEZONE = "America/New_York"
 [vars.FEEDS.lunch]
 MEAL = "Lunch"
 
+# Optional: select one cafeteria line when a school page combines multiple campuses.
+# Matches the line's name, ignoring capitalization and extra spaces. A missing line
+# produces no events; it never falls back to menus from another campus.
+# CAFETERIA_LINE = "Selected Campus"
+# Optional: keep these items in the event notes but out of the main-dish title.
+# TITLE_EXCLUDE = ["Rice"]
+# Optional: map a school's custom food categories to the supported groups.
+# Unmapped categories keep their existing behavior (milk and condiments are omitted).
+# [vars.FEEDS.lunch.TYPE_MAP]
+# "Hot Food" = "ENTREES"
+# "Vegetables" = "VEGETABLE"
+# "Grains" = "Breads/Grains"
+# "Fruits" = "FRUIT"
+
 # Optional extra calendars. Remove the # at the start of each line to turn one on.
 
 # [vars.FEEDS.breakfast]

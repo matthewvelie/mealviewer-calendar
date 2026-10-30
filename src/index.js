@@ -112,7 +112,8 @@ function readFeeds(env) {
   const fromFeeds = Boolean(defs && typeof defs === "object");
   const entries = fromFeeds
     ? Object.entries(defs)
-    : [["lunch", { MEAL: env.MEAL, CALENDAR_NAME: env.CALENDAR_NAME, EVENT_PREFIX: env.EVENT_PREFIX }]];
+    : [["lunch", { MEAL: env.MEAL, CALENDAR_NAME: env.CALENDAR_NAME, EVENT_PREFIX: env.EVENT_PREFIX,
+      CAFETERIA_LINE: env.CAFETERIA_LINE, TYPE_MAP: env.TYPE_MAP, TITLE_EXCLUDE: env.TITLE_EXCLUDE }]];
   if (!entries.length) throw new Error("FEEDS is empty. Add at least one [vars.FEEDS.<name>] table.");
 
   const feeds = new Map();
@@ -156,11 +157,23 @@ function readFeed(feedName, vars) {
   // can be told apart on one board: "Lincoln Lunch" / "🍽 Lincoln Lunch:".
   const schoolName = String(vars.SCHOOL_NAME ?? "").replace(/[\x00-\x1f\x7f]+/g, " ").trim();
   const label = schoolName ? `${schoolName} ${word}` : word;
+  const typeMap = vars.TYPE_MAP ?? {};
+  if (!typeMap || typeof typeMap !== "object" || Array.isArray(typeMap) ||
+      Object.values(typeMap).some((type) => !Object.hasOwn(KEEP_TYPES, type))) {
+    throw new Error("TYPE_MAP must map menu category names to ENTREES, VEGETABLE, Breads/Grains, or FRUIT.");
+  }
+  if (vars.TITLE_EXCLUDE !== undefined && (!Array.isArray(vars.TITLE_EXCLUDE) ||
+      vars.TITLE_EXCLUDE.some((name) => typeof name !== "string"))) {
+    throw new Error("TITLE_EXCLUDE must be an array of item names.");
+  }
   return {
     feedName,
     schoolId,
     meal,
     timezone,
+    cafeteriaLine: cleanText(vars.CAFETERIA_LINE),
+    typeMap: new Map(Object.entries(typeMap).map(([name, type]) => [cleanText(name).toLowerCase(), type])),
+    titleExclude: vars.TITLE_EXCLUDE ?? [],
     calendarName: String(vars.CALENDAR_NAME || (schoolName ? label : `School ${word}`)),
     eventPrefix: String(vars.EVENT_PREFIX || `${emoji} ${label}:`),
   };
@@ -235,6 +248,7 @@ async function fetchMenu(config) {
     const items = [];
     let theme = null;
     for (const line of block.cafeteriaLineList?.data ?? []) {
+      if (config.cafeteriaLine && !sameName(line.name, config.cafeteriaLine)) continue;
       for (const item of line.foodItemList?.data ?? []) {
         const name = cleanText(item.item_Name);
         const themeMatch = name.match(/^\*(.+)\*$/); // e.g. "*HOLIDAY MEAL!*"
@@ -242,7 +256,8 @@ async function fetchMenu(config) {
           theme = titleCase(themeMatch[1]);
           continue;
         }
-        if (name && Object.hasOwn(KEEP_TYPES, item.item_Type)) items.push({ type: item.item_Type, name });
+        const type = config.typeMap.get(cleanText(item.item_Type).toLowerCase()) ?? item.item_Type;
+        if (name && Object.hasOwn(KEEP_TYPES, type)) items.push({ type, name });
       }
     }
 
@@ -267,7 +282,7 @@ async function fetchMenu(config) {
   return days;
 }
 
-function buildCalendar(days, { feedName, schoolId, timezone, calendarName, eventPrefix }) {
+function buildCalendar(days, { feedName, schoolId, timezone, calendarName, eventPrefix, titleExclude }) {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
   const lines = [
     "BEGIN:VCALENDAR",
@@ -284,7 +299,8 @@ function buildCalendar(days, { feedName, schoolId, timezone, calendarName, event
   for (const { date, theme, groups } of days) {
     const ymd = date.replace(/-/g, "");
     const next = addDays(date, 1).replace(/-/g, "");
-    const mains = groups.ENTREES.filter((name) => !TITLE_SKIP.test(name));
+    const mains = groups.ENTREES.filter((name) => !TITLE_SKIP.test(name) &&
+      !titleExclude.some((excluded) => sameName(name, excluded)));
     // Fall back through the groups so a snack that's only fruit still gets a title.
     const dishes = [mains, ...Object.values(groups)].find((items) => items.length).join(" / ");
     const title = theme ? `${theme} ${dishes}` : dishes;
