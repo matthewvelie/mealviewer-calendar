@@ -13,10 +13,10 @@ const data = { menuSchedules: [{
   ] } }],
 }] };
 
-async function calendar(env) {
+async function calendar(env, menuData = data) {
   const originalFetch = globalThis.fetch;
   const originalCaches = globalThis.caches;
-  globalThis.fetch = async () => Response.json(data);
+  globalThis.fetch = async () => Response.json(menuData);
   globalThis.caches = { default: { match: async () => undefined, put: async () => {} } };
   try {
     const response = await worker.fetch(new Request("https://example.test/lunch.ics"), env, { waitUntil() {} });
@@ -52,3 +52,19 @@ test("legacy configuration continues to include ordinary entree categories", asy
   assert.equal(result.status, 200);
   assert.match(result.text, /Other Campus Pizza/);
 });
+
+for (const name of ["Pizza Lunchable", "Turkey Lunchables®", "Pizza Lunchedible", "PIZZA LUNCHABLE"]) {
+  test(`${name} stays in notes but never returns through the title fallback`, async () => {
+    for (const withMain of [true, false]) {
+      const menuData = structuredClone(data);
+      menuData.menuSchedules[0].menuBlocks[0].cafeteriaLineList.data = [
+        line("Selected Campus", [item(name, "Hot Food"), ...(withMain ? [item("Chicken Bowl", "Hot Food")] : [])]),
+      ];
+      const result = await calendar({ ...base, FEEDS: { lunch: feed } }, menuData);
+      assert.equal(result.status, 200);
+      const summary = result.text.split("\r\n").find((line) => line.startsWith("SUMMARY:"));
+      assert.equal(summary, `SUMMARY:🍽 Lunch: ${withMain ? "Chicken Bowl" : "See menu notes"}`);
+      assert.ok(result.text.toLowerCase().includes(`DESCRIPTION:Entrées: ${name}`.toLowerCase()));
+    }
+  });
+}

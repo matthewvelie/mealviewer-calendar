@@ -20,6 +20,8 @@ const SERVED_WITH = /\bw\/|\bwith\b|\band\b|&/i;
 const GARNISH = /\bgarnish$/i;
 // Section headers, for menus typed entirely in capitals where case alone can't tell them apart.
 const HEADER_NAME = /^(featured |daily )?(entrees?|vegetables?|fruits?|sides?|grains?|milk|options?|selections?|choice of \w+)$/i;
+// Lunchable products stay in the notes, including the menu spelling "Lunchedible".
+const LUNCHABLE = /\blunch(?:ables?|edibles?)\b/i;
 // Everyday staples (sunbutter & jelly sandwiches, bread rolls) stay in the notes but don't crowd
 // the event title. "Egg Roll" and "Spring Roll" are mains, so only bread-type rolls match.
 const TITLE_SKIP = /^(SBJ|WBJ|PBJ) Sandwich$|\b(dinner|bread|wheat|whole grain|wg|hawaiian) roll$/i;
@@ -299,10 +301,11 @@ function buildCalendar(days, { feedName, schoolId, timezone, calendarName, event
   for (const { date, theme, groups } of days) {
     const ymd = date.replace(/-/g, "");
     const next = addDays(date, 1).replace(/-/g, "");
-    const mains = groups.ENTREES.filter((name) => !TITLE_SKIP.test(name) &&
+    const mains = groups.ENTREES.filter((name) => !LUNCHABLE.test(name) && !TITLE_SKIP.test(name) &&
       !titleExclude.some((excluded) => sameName(name, excluded)));
     // Fall back through the groups so a snack that's only fruit still gets a title.
-    const dishes = [mains, ...Object.values(groups)].find((items) => items.length).join(" / ");
+    const titleGroups = Object.values(groups).map((items) => items.filter((name) => !LUNCHABLE.test(name)));
+    const dishes = ([mains, ...titleGroups].find((items) => items.length) ?? ["See menu notes"]).join(" / ");
     const title = theme ? `${theme} ${dishes}` : dishes;
     const description = Object.entries(KEEP_TYPES)
       .filter(([type]) => groups[type].length)
